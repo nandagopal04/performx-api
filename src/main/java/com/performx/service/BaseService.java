@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import com.performx.exception.GlobalException;
 import com.performx.request.AggregateRequest;
 import com.performx.request.FilterRequest;
 import com.performx.request.GroupByRequest;
@@ -47,8 +48,9 @@ public interface BaseService<T, D, ID> {
      *
      * @param d The DTO object to save.
      * @return The saved DTO.
+     * @throws GlobalException
      */
-    D save(D d);
+    D save(D d) throws GlobalException;
 
     /**
      * Persists a list of new records in bulk.
