@@ -2,6 +2,7 @@ package com.performx.service.impl;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -13,7 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Service;
 
-import com.performx.constant.GlobalConstants;
+import com.performx.constant.MessageCode;
 import com.performx.exception.GlobalException;
 import com.performx.mapper.GlobalMapper;
 import com.performx.request.AggregateRequest;
@@ -38,28 +39,30 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 	@Override
 	public D save(D d) throws GlobalException {
 		try {
-			log.info(GlobalConstants.ENTITY_SAVE_ATTEMPT, d);
+			log.info(MessageCode.ENTITY_SAVE_ATTEMPT.getMessage(), d);
 			T entity = globalMapper.mapToEntity(d);
 			T savedEntity = jpaRepository.save(entity);
-			log.info(GlobalConstants.SAVE_SUCCESSFUL);
+			log.info(MessageCode.ENTITY_SAVE_SUCCESS.getMessage());
 			return globalMapper.mapToDTO(savedEntity);
 		} catch (Exception e) {
-			log.error(GlobalConstants.ERROR_SAVE, d, e);
-			throw new GlobalException(String.format(GlobalConstants.SAVE_ERROR_REASON, e.getMessage()), e);
+			log.error(MessageCode.ENTITY_SAVE_ERROR.getMessage(), d, e);
+			throw new GlobalException(String.format(MessageCode.ENTITY_SAVE_ERROR_REASON.getMessage(), e.getMessage()),
+					e);
 		}
 	}
 
 	@Override
 	public List<D> saveAll(List<D> ds) throws GlobalException {
 		try {
-			log.info(GlobalConstants.ENTITY_SAVE_ALL_ATTEMPT, ds);
+			log.info(MessageCode.ENTITY_SAVE_ALL_ATTEMPT.getMessage(), ds);
 			List<T> entities = globalMapper.mapToEntityList(ds);
 			List<T> savedEntities = jpaRepository.saveAll(entities);
-			log.info(GlobalConstants.SAVE_SUCCESSFUL);
+			log.info(MessageCode.ENTITY_SAVE_SUCCESS.getMessage());
 			return globalMapper.mapToDTOList(savedEntities);
 		} catch (Exception e) {
-			log.error(GlobalConstants.ERROR_SAVE, ds, e);
-			throw new GlobalException(String.format(GlobalConstants.SAVE_ERROR_REASON, e.getMessage()), e);
+			log.error(MessageCode.ENTITY_SAVE_ERROR.getMessage(), ds, e);
+			throw new GlobalException(String.format(MessageCode.ENTITY_SAVE_ERROR_REASON.getMessage(), e.getMessage()),
+					e);
 		}
 	}
 
@@ -74,26 +77,26 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 	}
 
 	/**
-	 * Common reusable method for single-entity update operations. Handles both
-	 * explicit-ID updates (from path variable) and implicit-ID updates (from DTO
-	 * itself).
+	 * Common reusable method for single-entity update operations.
 	 */
 	private D performUpdate(ID pathId, D d, boolean extractFromDto) {
 		try {
 			ID effectiveId = extractFromDto ? extractIdFromDto(d) : pathId;
 			if (effectiveId == null) {
-				throw new GlobalException(GlobalConstants.ID_REQUIRED);
+				throw new GlobalException(MessageCode.ENTITY_ID_REQUIRED.getMessage());
 			}
-			log.info(GlobalConstants.ENTITY_UPDATE_ATTEMPT, effectiveId, d);
+			log.info(MessageCode.ENTITY_UPDATE_ATTEMPT.getMessage(), effectiveId, d);
 			findEntityById(effectiveId);
 			T updatedEntity = globalMapper.mapToEntity(d);
 			setEntityId(updatedEntity, effectiveId);
 			T savedEntity = jpaRepository.save(updatedEntity);
-			log.info(GlobalConstants.ENTITY_UPDATE_SUCCESS, effectiveId);
+			log.info(MessageCode.ENTITY_UPDATE_SUCCESS.getMessage(), effectiveId);
 			return globalMapper.mapToDTO(savedEntity);
+
 		} catch (Exception e) {
-			log.error(GlobalConstants.ERROR_UPDATE, d, e);
-			throw new GlobalException(String.format(GlobalConstants.UPDATE_ERROR_REASON, e.getMessage()), e);
+			log.error(MessageCode.ENTITY_UPDATE_ERROR.getMessage(), d, e);
+			throw new GlobalException(
+					String.format(MessageCode.ENTITY_UPDATE_ERROR_REASON.getMessage(), e.getMessage()), e);
 		}
 	}
 
@@ -106,14 +109,14 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 			idField.setAccessible(true);
 			idField.set(entity, id);
 		} catch (Exception e) {
-			log.warn(GlobalConstants.UNABLE_TO_SET_ID, entity.getClass().getSimpleName());
+			log.warn(MessageCode.ENTITY_SET_ID_FAIL.getMessage(), entity.getClass().getSimpleName());
 		}
 	}
 
 	private T findEntityById(ID id) throws GlobalException {
 		Optional<T> optEntity = jpaRepository.findById(id);
 		if (optEntity.isEmpty()) {
-			throw new GlobalException(String.format(GlobalConstants.ENTITY_NOT_FOUND, id));
+			throw new GlobalException(String.format(MessageCode.ENTITY_NOT_FOUND.getMessage(), id));
 		}
 		return optEntity.get();
 	}
@@ -121,12 +124,12 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 	@Override
 	public List<D> updateAll(List<D> ds) {
 		try {
-			log.info(GlobalConstants.ENTITY_UPDATE_ALL_ATTEMPT, ds.size());
+			log.info(MessageCode.ENTITY_UPDATE_ALL_ATTEMPT.getMessage(), ds.size());
 			List<ID> ids = ds.stream().map(this::extractIdFromDto).filter(Objects::nonNull).toList();
-			log.debug(GlobalConstants.IDS_TOBE_UPDATE, ids);
+			log.debug(MessageCode.ENTITY_IDS_TO_UPDATE.getMessage(), ids);
 			List<T> existingEntities = jpaRepository.findAllById(ids);
 			if (existingEntities.isEmpty()) {
-				throw new GlobalException(GlobalConstants.ENTITY_NOT_FOUND + ids);
+				throw new GlobalException(String.format(MessageCode.ENTITY_NOT_FOUND.getMessage(), ids));
 			}
 			Map<ID, T> entityMap = existingEntities.stream()
 					.collect(Collectors.toMap(this::extractIdFromEntity, e -> e));
@@ -135,7 +138,7 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 				ID id = extractIdFromDto(dto);
 				T existingEntity = entityMap.get(id);
 				if (existingEntity == null) {
-					log.warn(GlobalConstants.ENTITY_NOT_FOUND, id);
+					log.warn(MessageCode.ENTITY_NOT_FOUND.getMessage(), id);
 					continue;
 				}
 				T updatedEntity = globalMapper.mapToEntity(dto);
@@ -143,11 +146,12 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 				updatedEntities.add(updatedEntity);
 			}
 			List<T> savedEntities = jpaRepository.saveAll(updatedEntities);
-			log.info(GlobalConstants.ENTITY_UPDATE_SUCCESS, savedEntities.size());
+			log.info(MessageCode.ENTITY_UPDATE_ALL_SUCCESS.getMessage(), savedEntities.size());
 			return globalMapper.mapToDTOList(savedEntities);
 		} catch (Exception e) {
-			log.error(GlobalConstants.UPDATE_ERROR_REASON, e.getMessage(), e);
-			throw new GlobalException(String.format(GlobalConstants.UPDATE_ERROR_REASON, e.getMessage()), e);
+			log.error(MessageCode.ENTITY_UPDATE_ERROR_REASON.getMessage(), e.getMessage(), e);
+			throw new GlobalException(
+					String.format(MessageCode.ENTITY_UPDATE_ERROR_REASON.getMessage(), e.getMessage()), e);
 		}
 	}
 
@@ -158,7 +162,7 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 			idField.setAccessible(true);
 			return (ID) idField.get(dto);
 		} catch (Exception e) {
-			log.warn(GlobalConstants.FAILD_EXTRACT_ID, dto.getClass().getSimpleName());
+			log.warn(MessageCode.ENTITY_EXTRACT_ID_FAIL.getMessage(), dto.getClass().getSimpleName());
 			return null;
 		}
 	}
@@ -170,31 +174,56 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 			idField.setAccessible(true);
 			return (ID) idField.get(entity);
 		} catch (Exception e) {
-			log.warn(GlobalConstants.FAILD_EXTRACT_ID, entity.getClass().getSimpleName());
+			log.warn(MessageCode.ENTITY_EXTRACT_ID_FAIL.getMessage(), entity.getClass().getSimpleName());
 			return null;
 		}
 	}
 
 	@Override
 	public D findById(ID id) {
-		log.info(String.format(GlobalConstants.ATTEMPT_FIND_BY_ID_OPERATION, id));
-		T t = findEntityById(id);
-		log.info(String.format(GlobalConstants.FIND_BY_ID_SUCESSFULL, id));
-		return globalMapper.mapToDTO(t);
+		log.info(MessageCode.ENTITY_FIND_BY_ID_ATTEMPT.getMessage(), id);
+		T entity = findEntityById(id);
+		log.info(MessageCode.ENTITY_FIND_BY_ID_SUCCESS.getMessage(), id);
+		return globalMapper.mapToDTO(entity);
 	}
 
 	@Override
 	public List<D> findAll() {
-		log.info(GlobalConstants.ATTEMPT_FIND_ALL_OPERATION);
-		List<T> entities = jpaRepository.findAll();
-		log.info(String.format(GlobalConstants.FIND_ALL_SUCESSFULL, entities.size()));
-		return globalMapper.mapToDTOList(entities);
+		try {
+			log.info(MessageCode.ENTITY_FIND_ALL_ATTEMPT.getMessage());
+			List<T> entities = jpaRepository.findAll();
+			if (entities.isEmpty()) {
+				log.info(MessageCode.ENTITIES_NOT_FOUND.getMessage());
+				return Collections.emptyList();
+			}
+			log.info(MessageCode.ENTITY_FIND_ALL_SUCCESS.getMessage(), entities.size());
+			return globalMapper.mapToDTOList(entities);
+		} catch (Exception e) {
+			log.error(MessageCode.ENTITY_FETCH_ERROR.getMessage(), e.getMessage(), e);
+			throw new GlobalException(String.format(MessageCode.ENTITY_FETCH_ALL_FAIL.getMessage(), e.getMessage()), e);
+		}
 	}
 
 	@Override
 	public List<D> findMulti(List<ID> ids) {
-		// TODO Auto-generated method stub
-		return null;
+		try {
+			log.info(MessageCode.ENTITY_FIND_MULTI_ATTEMPT.getMessage(), ids);
+			if (ids == null || ids.isEmpty()) {
+				log.warn(MessageCode.ENTITY_FIND_NO_IDS_PROVIDED.getMessage());
+				return Collections.emptyList();
+			}
+			List<T> entities = jpaRepository.findAllById(ids);
+			if (entities.isEmpty()) {
+				log.info(MessageCode.ENTITY_FIND_MULTI_NOT_FOUND.getMessage(), ids);
+			} else {
+				log.info(MessageCode.ENTITY_FIND_MULTI_SUCCESS.getMessage(), entities.size());
+			}
+			return globalMapper.mapToDTOList(entities);
+		} catch (Exception e) {
+			log.error(MessageCode.ENTITY_FETCH_ERROR.getMessage(), e.getMessage(), e);
+			throw new GlobalException(String.format(MessageCode.ENTITY_FETCH_MULTI_FAIL.getMessage(), e.getMessage()),
+					e);
+		}
 	}
 
 	@Override
