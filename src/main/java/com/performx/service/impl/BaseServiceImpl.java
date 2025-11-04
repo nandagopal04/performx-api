@@ -1,9 +1,12 @@
 package com.performx.service.impl;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -62,13 +65,31 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 
 	@Override
 	public D update(ID id, D d) {
+		return performUpdate(id, d, false);
+	}
+
+	@Override
+	public D update(D d) {
+		return performUpdate(null, d, true);
+	}
+
+	/**
+	 * Common reusable method for single-entity update operations. Handles both
+	 * explicit-ID updates (from path variable) and implicit-ID updates (from DTO
+	 * itself).
+	 */
+	private D performUpdate(ID pathId, D d, boolean extractFromDto) {
 		try {
-			log.info(GlobalConstants.ENTITY_UPDATE_ATTEMPT, id, d);
-			findEntityById(id);
+			ID effectiveId = extractFromDto ? extractIdFromDto(d) : pathId;
+			if (effectiveId == null) {
+				throw new GlobalException(GlobalConstants.ID_REQUIRED);
+			}
+			log.info(GlobalConstants.ENTITY_UPDATE_ATTEMPT, effectiveId, d);
+			findEntityById(effectiveId);
 			T updatedEntity = globalMapper.mapToEntity(d);
-			setEntityId(updatedEntity, id);
+			setEntityId(updatedEntity, effectiveId);
 			T savedEntity = jpaRepository.save(updatedEntity);
-			log.info("Entity updated successfully with ID: {}", id);
+			log.info(GlobalConstants.ENTITY_UPDATE_SUCCESS, effectiveId);
 			return globalMapper.mapToDTO(savedEntity);
 		} catch (Exception e) {
 			log.error(GlobalConstants.ERROR_UPDATE, d, e);
@@ -85,7 +106,7 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 			idField.setAccessible(true);
 			idField.set(entity, id);
 		} catch (Exception e) {
-			log.warn("Unable to set ID field via reflection for entity: {}", entity.getClass().getSimpleName());
+			log.warn(GlobalConstants.UNABLE_TO_SET_ID, entity.getClass().getSimpleName());
 		}
 	}
 
@@ -99,20 +120,75 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 
 	@Override
 	public List<D> updateAll(List<D> ds) {
-		// TODO Auto-generated method stub
-		return null;
+		try {
+			log.info(GlobalConstants.ENTITY_UPDATE_ALL_ATTEMPT, ds.size());
+			List<ID> ids = ds.stream().map(this::extractIdFromDto).filter(Objects::nonNull).toList();
+			log.debug(GlobalConstants.IDS_TOBE_UPDATE, ids);
+			List<T> existingEntities = jpaRepository.findAllById(ids);
+			if (existingEntities.isEmpty()) {
+				throw new GlobalException(GlobalConstants.ENTITY_NOT_FOUND + ids);
+			}
+			Map<ID, T> entityMap = existingEntities.stream()
+					.collect(Collectors.toMap(this::extractIdFromEntity, e -> e));
+			List<T> updatedEntities = new ArrayList<>();
+			for (D dto : ds) {
+				ID id = extractIdFromDto(dto);
+				T existingEntity = entityMap.get(id);
+				if (existingEntity == null) {
+					log.warn(GlobalConstants.ENTITY_NOT_FOUND, id);
+					continue;
+				}
+				T updatedEntity = globalMapper.mapToEntity(dto);
+				setEntityId(updatedEntity, id);
+				updatedEntities.add(updatedEntity);
+			}
+			List<T> savedEntities = jpaRepository.saveAll(updatedEntities);
+			log.info(GlobalConstants.ENTITY_UPDATE_SUCCESS, savedEntities.size());
+			return globalMapper.mapToDTOList(savedEntities);
+		} catch (Exception e) {
+			log.error(GlobalConstants.UPDATE_ERROR_REASON, e.getMessage(), e);
+			throw new GlobalException(String.format(GlobalConstants.UPDATE_ERROR_REASON, e.getMessage()), e);
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private ID extractIdFromDto(D dto) {
+		try {
+			Field idField = dto.getClass().getDeclaredField("id");
+			idField.setAccessible(true);
+			return (ID) idField.get(dto);
+		} catch (Exception e) {
+			log.warn(GlobalConstants.FAILD_EXTRACT_ID, dto.getClass().getSimpleName());
+			return null;
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private ID extractIdFromEntity(T entity) {
+		try {
+			Field idField = entity.getClass().getDeclaredField("id");
+			idField.setAccessible(true);
+			return (ID) idField.get(entity);
+		} catch (Exception e) {
+			log.warn(GlobalConstants.FAILD_EXTRACT_ID, entity.getClass().getSimpleName());
+			return null;
+		}
 	}
 
 	@Override
 	public D findById(ID id) {
-		// TODO Auto-generated method stub
-		return null;
+		log.info(String.format(GlobalConstants.ATTEMPT_FIND_BY_ID_OPERATION, id));
+		T t = findEntityById(id);
+		log.info(String.format(GlobalConstants.FIND_BY_ID_SUCESSFULL, id));
+		return globalMapper.mapToDTO(t);
 	}
 
 	@Override
 	public List<D> findAll() {
-		// TODO Auto-generated method stub
-		return null;
+		log.info(GlobalConstants.ATTEMPT_FIND_ALL_OPERATION);
+		List<T> entities = jpaRepository.findAll();
+		log.info(String.format(GlobalConstants.FIND_ALL_SUCESSFULL, entities.size()));
+		return globalMapper.mapToDTOList(entities);
 	}
 
 	@Override

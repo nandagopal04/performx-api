@@ -69,6 +69,15 @@ public interface BaseService<T, D, ID> {
      */
     D update(ID id, D d);
 
+    
+	/**
+	 * Updates an existing record
+	 * 
+	 * @param d the DTO with updated fields.
+	 * @return the updated DTO
+	 */
+	D update(D d);
+
     /**
      * Updates multiple records in bulk.
      *
