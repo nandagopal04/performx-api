@@ -43,18 +43,22 @@ public enum MessageCode {
 	// ========== FIND OPERATIONS =================================
 	// ============================================================
 
-	ENTITY_FIND_BY_ID_ATTEMPT("MSG_FIND_001", Severity.INFO, "Attempting to find entity with ID: {}"),
-	ENTITY_FIND_BY_ID_SUCCESS("MSG_FIND_002", Severity.INFO, "Entity found successfully with ID: {}"),
-	ENTITY_NOT_FOUND("MSG_FIND_003", Severity.WARN, "Entity not found with ID(s): {}"),
-
 	ENTITY_FIND_ALL_ATTEMPT("MSG_FIND_004", Severity.INFO, "Attempting to find all entities"),
 	ENTITY_FIND_ALL_SUCCESS("MSG_FIND_005", Severity.INFO, "Find all successful — {} records returned"),
 	ENTITIES_NOT_FOUND("MSG_FIND_006", Severity.WARN, "No entities found in database"),
+
+	ENTITY_FIND_BY_ID_ATTEMPT("MSG_FIND_001", Severity.INFO, "Attempting to find entity with ID: {}"),
+	ENTITY_FIND_BY_ID_SUCCESS("MSG_FIND_002", Severity.INFO, "Entity found successfully with ID: {}"),
+	ENTITY_NOT_FOUND("MSG_FIND_003", Severity.WARN, "Entity not found with ID(s): {}"),
 
 	ENTITY_FIND_MULTI_ATTEMPT("MSG_FIND_007", Severity.INFO, "Attempting to find entities with IDs: {}"),
 	ENTITY_FIND_MULTI_SUCCESS("MSG_FIND_008", Severity.INFO, "Successfully found {} entities for given IDs"),
 	ENTITY_FIND_MULTI_NOT_FOUND("MSG_FIND_009", Severity.WARN, "No entities found for provided IDs: {}"),
 	ENTITY_FIND_NO_IDS_PROVIDED("MSG_FIND_010", Severity.WARN, "No IDs provided for multi-entity retrieval operation"),
+
+	/** ✅ Pagination Support */
+	ATTEMPT_FIND_PAGE_OPERATION("MSG_FIND_011", Severity.INFO, "Attempting to find entities as page"),
+	FIND_PAGE_SUCCESS("MSG_FIND_012", Severity.INFO, "Find as page successful — {} records returned"),
 
 	// ============================================================
 	// ========== ERROR HANDLING ==================================

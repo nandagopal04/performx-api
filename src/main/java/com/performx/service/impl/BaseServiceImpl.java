@@ -277,8 +277,19 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 
 	@Override
 	public Page<D> findAsPage(Pageable pageable) {
-		// TODO Auto-generated method stub
-		return null;
+		try {
+			log.info(MessageCode.ATTEMPT_FIND_PAGE_OPERATION.getMessage());
+			Page<T> entityPage = jpaRepository.findAll(pageable);
+			if (entityPage.isEmpty()) {
+				log.info(MessageCode.ENTITIES_NOT_FOUND.getMessage());
+				return Page.empty(pageable);
+			}
+			log.info(MessageCode.FIND_PAGE_SUCCESS.getMessage(), entityPage.getTotalElements());
+			return entityPage.map(globalMapper::mapToDTO);
+		} catch (Exception e) {
+			log.error(MessageCode.ENTITY_FETCH_ERROR.getMessage(), e.getMessage(), e);
+			throw new GlobalException(String.format(MessageCode.ENTITY_FETCH_ALL_FAIL.getMessage(), e.getMessage()), e);
+		}
 	}
 
 	@Override
