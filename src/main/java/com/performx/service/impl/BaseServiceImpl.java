@@ -114,6 +114,7 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 	}
 
 	private T findEntityById(ID id) throws GlobalException {
+		log.info(String.format(MessageCode.ENTITY_FIND_BY_ID_ATTEMPT.getMessage(), id));
 		Optional<T> optEntity = jpaRepository.findById(id);
 		if (optEntity.isEmpty()) {
 			throw new GlobalException(String.format(MessageCode.ENTITY_NOT_FOUND.getMessage(), id));
@@ -181,7 +182,6 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 
 	@Override
 	public D findById(ID id) {
-		log.info(MessageCode.ENTITY_FIND_BY_ID_ATTEMPT.getMessage(), id);
 		T entity = findEntityById(id);
 		log.info(MessageCode.ENTITY_FIND_BY_ID_SUCCESS.getMessage(), id);
 		return globalMapper.mapToDTO(entity);
@@ -228,20 +228,51 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 
 	@Override
 	public D deleteById(ID id) {
-		// TODO Auto-generated method stub
-		return null;
+		try {
+			log.info(MessageCode.ENTITY_DELETE_BY_ID_ATTEMPT.getMessage(), id);
+			T entity = findEntityById(id);
+			jpaRepository.delete(entity);
+			log.info(MessageCode.ENTITY_DELETE_BY_ID_SUCCESS.getMessage(), id);
+			return globalMapper.mapToDTO(entity);
+		} catch (Exception e) {
+			log.error(MessageCode.ENTITY_DELETE_BY_ID_FAIL.getMessage(), id, e);
+			throw new GlobalException(String.format(MessageCode.ENTITY_DELETE_BY_ID_FAIL.getMessage(), id), e);
+		}
 	}
 
 	@Override
 	public List<D> deleteMulti(List<ID> ids) {
-		// TODO Auto-generated method stub
-		return null;
+		try {
+			log.info(MessageCode.ENTITY_DELETE_MULTI_ATTEMPT.getMessage(), ids);
+			if (ids == null || ids.isEmpty()) {
+				log.warn(MessageCode.ENTITY_FIND_NO_IDS_PROVIDED.getMessage());
+				return Collections.emptyList();
+			}
+			List<T> entities = jpaRepository.findAllById(ids);
+			if (entities.isEmpty()) {
+				log.warn(MessageCode.ENTITY_DELETE_MULTI_FAIL.getMessage(), ids);
+				return Collections.emptyList();
+			}
+			jpaRepository.deleteAll(entities);
+			log.info(MessageCode.ENTITY_DELETE_MULTI_SUCCESS.getMessage(), ids);
+			return globalMapper.mapToDTOList(entities);
+		} catch (Exception e) {
+			log.error(MessageCode.ENTITY_DELETE_MULTI_FAIL.getMessage(), ids, e);
+			throw new GlobalException(String.format(MessageCode.ENTITY_DELETE_MULTI_FAIL.getMessage(), ids), e);
+		}
 	}
 
 	@Override
 	public Boolean deleteAll() {
-		// TODO Auto-generated method stub
-		return null;
+		try {
+			log.info(MessageCode.ENTITY_DELETE_ALL_ATTEMPT.getMessage());
+			jpaRepository.deleteAll();
+			log.info(MessageCode.ENTITY_DELETE_ALL_SUCCESS.getMessage());
+			return true;
+		} catch (Exception e) {
+			log.error(MessageCode.ENTITY_DELETE_ALL_FAIL.getMessage(), e);
+			throw new GlobalException(MessageCode.ENTITY_DELETE_ALL_FAIL.getMessage(), e);
+		}
 	}
 
 	@Override
