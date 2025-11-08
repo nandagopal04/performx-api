@@ -1,13 +1,13 @@
 package com.performx.request;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import com.performx.constant.LogicalOperator;
-import com.performx.constant.SortOrder;
 
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -48,18 +48,22 @@ import lombok.ToString;
 @AllArgsConstructor
 @NoArgsConstructor
 @EqualsAndHashCode()
+@Builder
 public class FilterRequest {
 
 	/** Global search keyword (optional). */
 	private String search;
 
 	/** List of individual filter conditions. */
-	private List<FilterCondition> conditions;
+	@Default
+	private List<FilterCondition> conditions = new ArrayList<>();;
 
 	/** Logical operator connecting multiple conditions (AND/OR). */
+	@Default
 	private LogicalOperator logicalOperator = LogicalOperator.AND;
 
 	/** Sorting instructions for the query result. */
-	private List<SortOrder> sortOrders;
+	@Default
+	private List<SortOrder> sortOrders = new ArrayList<>();
 
 }

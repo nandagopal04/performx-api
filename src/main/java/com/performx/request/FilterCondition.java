@@ -19,6 +19,15 @@ public class FilterCondition {
 
 	private String field;
 	private FilterOperator operator;
-	private Object value;
+	private Object value; // Single value OR list for IN
+	private Object additionalValue; // Used for BETWEEN only
+
+	public boolean isBetween() {
+		return operator == FilterOperator.BETWEEN;
+	}
+
+	public boolean isCollectionBased() {
+		return operator == FilterOperator.IN || operator == FilterOperator.NOT_IN;
+	}
 
 }

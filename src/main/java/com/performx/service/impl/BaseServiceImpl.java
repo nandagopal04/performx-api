@@ -1,27 +1,45 @@
 package com.performx.service.impl;
 
 import java.lang.reflect.Field;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Service;
 
+import com.performx.constant.LogicalOperator;
 import com.performx.constant.MessageCode;
+import com.performx.constant.SortDirection;
 import com.performx.exception.GlobalException;
 import com.performx.mapper.GlobalMapper;
 import com.performx.request.AggregateRequest;
+import com.performx.request.FilterCondition;
 import com.performx.request.FilterRequest;
 import com.performx.request.GroupByRequest;
+import com.performx.request.SortOrder;
 import com.performx.service.BaseService;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Order;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -31,9 +49,19 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 	protected JpaRepository<T, ID> jpaRepository;
 	protected GlobalMapper<T, D> globalMapper;
 
-	public BaseServiceImpl(JpaRepository<T, ID> jpaRepository, GlobalMapper<T, D> globalMapper) {
+	@Autowired
+	private EntityManager entityManager;
+
+	private final Class<T> entityClass;
+
+	protected Class<T> getEntityClass() {
+		return entityClass;
+	}
+
+	public BaseServiceImpl(JpaRepository<T, ID> jpaRepository, GlobalMapper<T, D> globalMapper, Class<T> entityClass) {
 		this.jpaRepository = jpaRepository;
 		this.globalMapper = globalMapper;
+		this.entityClass = entityClass;
 	}
 
 	@Override
@@ -294,8 +322,143 @@ public abstract class BaseServiceImpl<T, D, ID> implements BaseService<T, D, ID>
 
 	@Override
 	public List<D> findAll(FilterRequest filterRequest) {
-		// TODO Auto-generated method stub
-		return null;
+		try {
+			log.info(MessageCode.ENTITY_FIND_ALL_ATTEMPT.getMessage());
+			CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+			CriteriaQuery<T> cq = cb.createQuery(getEntityClass());
+			Root<T> root = cq.from(getEntityClass());
+			List<Predicate> predicates = new ArrayList<>();
+			if (filterRequest != null && filterRequest.getConditions() != null) {
+				for (FilterCondition fc : filterRequest.getConditions()) {
+					Predicate p = buildPredicate(cb, root, fc);
+					if (p != null)
+						predicates.add(p);
+				}
+			}
+			// Combine with AND/OR (default AND)
+			Predicate where = predicates.isEmpty() ? cb.conjunction()
+					: (filterRequest != null && filterRequest.getLogicalOperator() == LogicalOperator.OR)
+							? cb.or(predicates.toArray(new Predicate[0]))
+							: cb.and(predicates.toArray(new Predicate[0]));
+			cq.select(root).where(where);
+			// Sorting (optional)
+			if (filterRequest != null && filterRequest.getSortOrders() != null) {
+				List<Order> orders = new ArrayList<>();
+				for (SortOrder so : filterRequest.getSortOrders()) {
+					Path<?> path = root.get(so.getField());
+					orders.add(so.getDirection() == SortDirection.DESC ? cb.desc(path) : cb.asc(path));
+				}
+				if (!orders.isEmpty())
+					cq.orderBy(orders);
+			}
+			List<T> entities = entityManager.createQuery(cq).getResultList();
+			if (entities.isEmpty()) {
+				log.info(MessageCode.ENTITIES_NOT_FOUND.getMessage());
+				return Collections.emptyList();
+			}
+			log.info(MessageCode.ENTITY_FIND_ALL_SUCCESS.getMessage(), entities.size());
+			return globalMapper.mapToDTOList(entities);
+
+		} catch (Exception e) {
+			log.error(MessageCode.ENTITY_FETCH_ERROR.getMessage(), e.getMessage(), e);
+			throw new GlobalException(String.format(MessageCode.ENTITY_FETCH_ALL_FAIL.getMessage(), e.getMessage()), e);
+		}
+	}
+
+	/** Build a single Predicate for a condition, with basic type handling. */
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private Predicate buildPredicate(CriteriaBuilder cb, Root<T> root, FilterCondition fc) {
+		String field = fc.getField();
+		Object value = fc.getValue();
+		Path<?> path = root.get(field);
+		Class<?> javaType = path.getJavaType();
+
+		switch (fc.getOperator()) {
+		case EQUALS:
+			return cb.equal(path, convert(value, javaType));
+		case NOT_EQUALS:
+			return cb.notEqual(path, convert(value, javaType));
+		case GREATER_THAN:
+			return cb.greaterThan((Expression<? extends Comparable>) path, (Comparable) convert(value, javaType));
+		case GREATER_THAN_EQUAL:
+			return cb.greaterThanOrEqualTo((Expression<? extends Comparable>) path,
+					(Comparable) convert(value, javaType));
+		case LESS_THAN:
+			return cb.lessThan((Expression<? extends Comparable>) path, (Comparable) convert(value, javaType));
+		case LESS_THAN_EQUAL:
+			return cb.lessThanOrEqualTo((Expression<? extends Comparable>) path, (Comparable) convert(value, javaType));
+		case BETWEEN: {
+			Object v1 = convert(value, javaType);
+			Object v2 = convert(fc.getAdditionalValue(), javaType);
+			return cb.between((Expression<? extends Comparable>) path, (Comparable) v1, (Comparable) v2);
+		}
+		case LIKE:
+			if (javaType != String.class) {
+				throw new GlobalException("LIKE is only valid for String fields: " + field);
+			}
+			return cb.like((Expression<String>) path, "%" + value + "%");
+		case IN:
+			if (!(value instanceof Collection<?> col)) {
+				throw new GlobalException("Value for IN must be a collection: " + field);
+			}
+			CriteriaBuilder.In<Object> in = cb.in(path);
+			for (Object v : col)
+				in.value(convert(v, javaType));
+			return in;
+		case NOT_IN:
+			if (!(value instanceof Collection<?> col2)) {
+				throw new GlobalException("Value for NOT_IN must be a collection: " + field);
+			}
+			CriteriaBuilder.In<Object> in2 = cb.in(path);
+			for (Object v : col2)
+				in2.value(convert(v, javaType));
+			return cb.not(in2);
+		case IS_NULL:
+			return cb.isNull(path);
+		case IS_NOT_NULL:
+			return cb.isNotNull(path);
+		default:
+			throw new GlobalException("Unsupported operator: " + fc.getOperator());
+		}
+	}
+
+	/**
+	 * Minimal converter to coerce values to the field's Java type. Extend as
+	 * needed.
+	 */
+	private Object convert(Object value, Class<?> targetType) {
+		if (value == null || targetType.isInstance(value))
+			return value;
+
+		if (targetType == String.class)
+			return String.valueOf(value);
+		if (Number.class.isAssignableFrom(targetType)) {
+			String s = String.valueOf(value);
+			if (targetType == Integer.class)
+				return Integer.valueOf(s);
+			if (targetType == Long.class)
+				return Long.valueOf(s);
+			if (targetType == Double.class)
+				return Double.valueOf(s);
+			if (targetType == Float.class)
+				return Float.valueOf(s);
+			if (targetType == Short.class)
+				return Short.valueOf(s);
+			if (targetType == BigDecimal.class)
+				return new BigDecimal(s);
+		}
+		if (targetType == Boolean.class)
+			return Boolean.valueOf(String.valueOf(value));
+		if (Comparable.class.isAssignableFrom(targetType) && value instanceof String str) {
+			// dates/times/uuids — plug in your parsers here
+			if (targetType == LocalDate.class)
+				return LocalDate.parse(str);
+			if (targetType == LocalDateTime.class)
+				return LocalDateTime.parse(str);
+			if (targetType == UUID.class)
+				return UUID.fromString(str);
+		}
+		return value; // last resort
 	}
 
 	@Override

@@ -1,12 +1,12 @@
 package com.performx.constant;
 
-public enum SortOrder {
+public enum SortDirection {
 
 	ASC("ASC"), DESC("DESC");
 
 	private String value;
 
-	private SortOrder(String value) {
+	private SortDirection(String value) {
 		this.value = value;
 	}
 
